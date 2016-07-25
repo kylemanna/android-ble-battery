@@ -65,7 +65,14 @@
                   android:text="@string/no_data"
                   android:textSize="18sp"/>
     </LinearLayout>
+
+    <ExpandableListView
+        android:id="@+id/gatt_battery_list"
+        android:layout_width="match_parent"
+        android:layout_height="142dp"
+        android:layout_gravity="center_horizontal" />
+
     <ExpandableListView android:id="@+id/gatt_services_list"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
+            android:layout_height="331dp"/>
 </LinearLayout>
