@@ -150,6 +150,7 @@ public class DeviceControlActivity extends Activity {
 
     private void clearUI() {
         mGattServicesList.setAdapter((SimpleExpandableListAdapter) null);
+        mGattBatteryList.setAdapter((SimpleExpandableListAdapter) null);
         mDataField.setText(R.string.no_data);
     }
 
@@ -258,6 +259,10 @@ public class DeviceControlActivity extends Activity {
                 = new ArrayList<ArrayList<HashMap<String, String>>>();
         mGattCharacteristics = new ArrayList<ArrayList<BluetoothGattCharacteristic>>();
 
+        ArrayList<HashMap<String, String>> gattBatteryServiceData = new ArrayList<HashMap<String, String>>();
+        ArrayList<ArrayList<HashMap<String, String>>> gattBatteryCharacteristicData
+                = new ArrayList<ArrayList<HashMap<String, String>>>();
+
         // Loops through available GATT Services.
         for (BluetoothGattService gattService : gattServices) {
             HashMap<String, String> currentServiceData = new HashMap<String, String>();
@@ -286,6 +291,13 @@ public class DeviceControlActivity extends Activity {
             }
             mGattCharacteristics.add(charas);
             gattCharacteristicData.add(gattCharacteristicGroupData);
+
+
+            if (uuid.equals(SampleGattAttributes.BATTERY_LEVEL)) {
+                gattBatteryServiceData.add(currentServiceData);
+                gattBatteryCharacteristicData.add(gattCharacteristicGroupData);
+            }
+
         }
 
         SimpleExpandableListAdapter gattServiceAdapter = new SimpleExpandableListAdapter(
@@ -300,6 +312,20 @@ public class DeviceControlActivity extends Activity {
                 new int[] { android.R.id.text1, android.R.id.text2 }
         );
         mGattServicesList.setAdapter(gattServiceAdapter);
+
+
+        SimpleExpandableListAdapter gattBatServiceAdapter = new SimpleExpandableListAdapter(
+                this,
+                gattBatteryServiceData,
+                android.R.layout.simple_expandable_list_item_2,
+                new String[] {LIST_NAME, LIST_UUID},
+                new int[] { android.R.id.text1, android.R.id.text2 },
+                gattBatteryCharacteristicData,
+                android.R.layout.simple_expandable_list_item_2,
+                new String[] {LIST_NAME, LIST_UUID},
+                new int[] { android.R.id.text1, android.R.id.text2 }
+        );
+        mGattBatteryList.setAdapter(gattBatServiceAdapter);
     }
 
     private static IntentFilter makeGattUpdateIntentFilter() {
