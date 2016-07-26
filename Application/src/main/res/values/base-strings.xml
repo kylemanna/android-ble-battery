@@ -16,7 +16,7 @@
 -->
 
 <resources>
-    <string name="app_name">BluetoothLeGatt</string>
+    <string name="app_name">BLE Battery</string>
     <string name="intro_message">
         <![CDATA[
         
