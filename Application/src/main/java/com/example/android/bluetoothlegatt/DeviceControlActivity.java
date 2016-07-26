@@ -31,13 +31,18 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.BaseAdapter;
 import android.widget.ExpandableListView;
+import android.widget.ListAdapter;
+import android.widget.ListView;
+import android.widget.SimpleAdapter;
 import android.widget.SimpleExpandableListAdapter;
 import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * For a given BLE device, this Activity provides the user interface to connect, display data,
@@ -56,15 +61,19 @@ public class DeviceControlActivity extends Activity {
     private String mDeviceName;
     private String mDeviceAddress;
     private ExpandableListView mGattServicesList;
-    private ExpandableListView mGattBatteryList;
+    private ListView mGattBatteryList;
     private BluetoothLeService mBluetoothLeService;
     private ArrayList<ArrayList<BluetoothGattCharacteristic>> mGattCharacteristics =
             new ArrayList<ArrayList<BluetoothGattCharacteristic>>();
     private boolean mConnected = false;
     private BluetoothGattCharacteristic mNotifyCharacteristic;
+    private ArrayList<HashMap<String, String>> mGattBatteryServiceData = new ArrayList<HashMap<String, String>>();
 
     private final String LIST_NAME = "NAME";
     private final String LIST_UUID = "UUID";
+    private final String LIST_VALUE = "VALUE";
+    private final String LIST_LOCATION = "LOC";
+
 
     // Code to manage Service lifecycle.
     private final ServiceConnection mServiceConnection = new ServiceConnection() {
@@ -110,6 +119,45 @@ public class DeviceControlActivity extends Activity {
                 displayGattServices(mBluetoothLeService.getSupportedGattServices());
             } else if (BluetoothLeService.ACTION_DATA_AVAILABLE.equals(action)) {
                 displayData(intent.getStringExtra(BluetoothLeService.EXTRA_DATA));
+            } else if (BluetoothLeService.ACTION_BAT_DATA_AVAILABLE.equals(action)) {
+                final Integer percent = intent.getIntExtra(BluetoothLeService.EXTRA_VALUE, -1);
+                final String location = intent.getStringExtra(BluetoothLeService.EXTRA_LOCATION);
+
+                if (location == null) {
+                    return;
+                }
+
+                Log.d("devctrl", String.format("new battery level = %d%%", percent));
+
+                Integer offset = 3;
+                Integer cells = 1;
+                Double scale = 1.2;
+                if (location.equals("main")) {
+                    cells = 2;
+                }
+                Double voltage = cells * (percent/100.0 * scale + offset);
+                String newLevel = String.format("%d%% -> %02.02fV", percent, voltage);
+
+                boolean found = false;
+                for (HashMap<String, String> bat : mGattBatteryServiceData) {
+                    String existingLocation = bat.get(LIST_LOCATION);
+                    if (existingLocation.equals(location)) {
+                        bat.put(LIST_VALUE, newLevel);
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    HashMap<String, String> batData = new HashMap<String, String>();
+
+                    batData.put(LIST_VALUE, newLevel);
+                    batData.put(LIST_LOCATION, location);
+
+                    mGattBatteryServiceData.add(batData);
+                }
+
+                ((BaseAdapter)mGattBatteryList.getAdapter()).notifyDataSetChanged();
             }
         }
     };
@@ -150,7 +198,7 @@ public class DeviceControlActivity extends Activity {
 
     private void clearUI() {
         mGattServicesList.setAdapter((SimpleExpandableListAdapter) null);
-        mGattBatteryList.setAdapter((SimpleExpandableListAdapter) null);
+        mGattBatteryList.setAdapter((ListAdapter) null);
         mDataField.setText(R.string.no_data);
     }
 
@@ -168,7 +216,7 @@ public class DeviceControlActivity extends Activity {
         mGattServicesList = (ExpandableListView) findViewById(R.id.gatt_services_list);
         mGattServicesList.setOnChildClickListener(servicesListClickListner);
 
-        mGattBatteryList = (ExpandableListView) findViewById(R.id.gatt_battery_list);
+        mGattBatteryList = (ListView) findViewById(R.id.gatt_battery_list);
 
         mConnectionState = (TextView) findViewById(R.id.connection_state);
         mDataField = (TextView) findViewById(R.id.data_value);
@@ -259,10 +307,6 @@ public class DeviceControlActivity extends Activity {
                 = new ArrayList<ArrayList<HashMap<String, String>>>();
         mGattCharacteristics = new ArrayList<ArrayList<BluetoothGattCharacteristic>>();
 
-        ArrayList<HashMap<String, String>> gattBatteryServiceData = new ArrayList<HashMap<String, String>>();
-        ArrayList<ArrayList<HashMap<String, String>>> gattBatteryCharacteristicData
-                = new ArrayList<ArrayList<HashMap<String, String>>>();
-
         // Loops through available GATT Services.
         for (BluetoothGattService gattService : gattServices) {
             HashMap<String, String> currentServiceData = new HashMap<String, String>();
@@ -279,6 +323,13 @@ public class DeviceControlActivity extends Activity {
             ArrayList<BluetoothGattCharacteristic> charas =
                     new ArrayList<BluetoothGattCharacteristic>();
 
+
+            if (uuid.equals(SampleGattAttributes.BATTERY_SERVICE)) {
+                BluetoothGattCharacteristic batChar = gattService.getCharacteristic(UUID.fromString(SampleGattAttributes.BATTERY_LEVEL));
+                /* Trigger a read which will later add the characteristic */
+                mBluetoothLeService.readCharacteristic(batChar);
+            }
+
             // Loops through available Characteristics.
             for (BluetoothGattCharacteristic gattCharacteristic : gattCharacteristics) {
                 charas.add(gattCharacteristic);
@@ -291,12 +342,6 @@ public class DeviceControlActivity extends Activity {
             }
             mGattCharacteristics.add(charas);
             gattCharacteristicData.add(gattCharacteristicGroupData);
-
-
-            if (uuid.equals(SampleGattAttributes.BATTERY_LEVEL)) {
-                gattBatteryServiceData.add(currentServiceData);
-                gattBatteryCharacteristicData.add(gattCharacteristicGroupData);
-            }
 
         }
 
@@ -314,15 +359,11 @@ public class DeviceControlActivity extends Activity {
         mGattServicesList.setAdapter(gattServiceAdapter);
 
 
-        SimpleExpandableListAdapter gattBatServiceAdapter = new SimpleExpandableListAdapter(
+        SimpleAdapter gattBatServiceAdapter = new SimpleAdapter(
                 this,
-                gattBatteryServiceData,
-                android.R.layout.simple_expandable_list_item_2,
-                new String[] {LIST_NAME, LIST_UUID},
-                new int[] { android.R.id.text1, android.R.id.text2 },
-                gattBatteryCharacteristicData,
-                android.R.layout.simple_expandable_list_item_2,
-                new String[] {LIST_NAME, LIST_UUID},
+                mGattBatteryServiceData,
+                android.R.layout.simple_list_item_2,
+                new String[] {LIST_VALUE, LIST_LOCATION},
                 new int[] { android.R.id.text1, android.R.id.text2 }
         );
         mGattBatteryList.setAdapter(gattBatServiceAdapter);
@@ -334,6 +375,7 @@ public class DeviceControlActivity extends Activity {
         intentFilter.addAction(BluetoothLeService.ACTION_GATT_DISCONNECTED);
         intentFilter.addAction(BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED);
         intentFilter.addAction(BluetoothLeService.ACTION_DATA_AVAILABLE);
+        intentFilter.addAction(BluetoothLeService.ACTION_BAT_DATA_AVAILABLE);
         return intentFilter;
     }
 }
